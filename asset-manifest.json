@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/btc-put-wall-dashboard/static/js/main.44a2f198.js",
+    "main.js": "/btc-put-wall-dashboard/static/js/main.ee2da586.js",
     "index.html": "/btc-put-wall-dashboard/index.html",
-    "main.44a2f198.js.map": "/btc-put-wall-dashboard/static/js/main.44a2f198.js.map"
+    "main.ee2da586.js.map": "/btc-put-wall-dashboard/static/js/main.ee2da586.js.map"
   },
   "entrypoints": [
-    "static/js/main.44a2f198.js"
+    "static/js/main.ee2da586.js"
   ]
 }
