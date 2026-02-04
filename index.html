@@ -25,8 +25,7 @@
       letter-spacing:-0.03em;
       font-variant-numeric: tabular-nums;
       display:inline-block;
-      transform-origin:center center;
-      will-change: transform;
+      will-change: font-size;
     }
 
     ::selection{background:transparent}
@@ -67,6 +66,9 @@
     let renderTimer;
 
     let fitRaf = null;
+    let lastFitText = '';
+    let lastFitW = 0;
+    let lastFitH = 0;
     function fitToViewport(){
       if(fitRaf) return;
       fitRaf = requestAnimationFrame(()=>{
@@ -74,11 +76,29 @@
         const vv = window.visualViewport;
         const vw = Math.max(1, vv ? vv.width : window.innerWidth);
         const vh = Math.max(1, vv ? vv.height : window.innerHeight);
-        el.style.transform = 'scale(1)';
-        const rect = el.getBoundingClientRect();
-        if(rect.width === 0 || rect.height === 0) return;
-        const scale = Math.min((vw * 0.98) / rect.width, (vh * 0.94) / rect.height);
-        el.style.transform = `scale(${scale})`;
+        const text = el.textContent || '';
+        if(text === lastFitText && vw === lastFitW && vh === lastFitH) return;
+        lastFitText = text;
+        lastFitW = vw;
+        lastFitH = vh;
+
+        const targetW = vw * 0.98;
+        const targetH = vh * 0.94;
+        let low = 24;
+        let high = 2000;
+        let best = low;
+        while(low <= high){
+          const mid = Math.floor((low + high) / 2);
+          el.style.fontSize = `${mid}px`;
+          const rect = el.getBoundingClientRect();
+          if(rect.width <= targetW && rect.height <= targetH){
+            best = mid;
+            low = mid + 1;
+          }else{
+            high = mid - 1;
+          }
+        }
+        el.style.fontSize = `${best}px`;
       });
     }
 
