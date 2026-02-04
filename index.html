@@ -71,12 +71,13 @@
       if(fitRaf) return;
       fitRaf = requestAnimationFrame(()=>{
         fitRaf = null;
-        const vw = Math.max(1, window.innerWidth);
-        const vh = Math.max(1, window.innerHeight);
+        const vv = window.visualViewport;
+        const vw = Math.max(1, vv ? vv.width : window.innerWidth);
+        const vh = Math.max(1, vv ? vv.height : window.innerHeight);
         el.style.transform = 'scale(1)';
         const rect = el.getBoundingClientRect();
         if(rect.width === 0 || rect.height === 0) return;
-        const scale = Math.min((vw * 0.92) / rect.width, (vh * 0.86) / rect.height);
+        const scale = Math.min((vw * 0.98) / rect.width, (vh * 0.94) / rect.height);
         el.style.transform = `scale(${scale})`;
       });
     }
@@ -179,6 +180,12 @@
     fitToViewport();
 
     window.addEventListener('resize', fitToViewport);
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', fitToViewport);
+    }
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(fitToViewport);
+    }
 
     // 如果 5 秒没收到消息，开启轮询兜底
     setInterval(()=>{
