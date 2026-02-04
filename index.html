@@ -46,6 +46,10 @@
     const el = document.getElementById('price');
 
     const nf = new Intl.NumberFormat(undefined, {minimumFractionDigits: DECIMALS, maximumFractionDigits: DECIMALS});
+    const white = (qs.get('white') || '').toLowerCase();
+    if(white === '1' || white === 'true'){
+      document.documentElement.style.setProperty('--text', '#ffffff');
+    }
 
     function formatPrice(num){
       const n = Number(num);
