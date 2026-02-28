@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/btc-put-wall-dashboard/static/css/main.08a8843c.css",
+    "main.css": "/btc-put-wall-dashboard/static/css/main.b8929aae.css",
     "main.js": "/btc-put-wall-dashboard/static/js/main.926e4611.js",
     "index.html": "/btc-put-wall-dashboard/index.html",
-    "main.08a8843c.css.map": "/btc-put-wall-dashboard/static/css/main.08a8843c.css.map",
+    "main.b8929aae.css.map": "/btc-put-wall-dashboard/static/css/main.b8929aae.css.map",
     "main.926e4611.js.map": "/btc-put-wall-dashboard/static/js/main.926e4611.js.map"
   },
   "entrypoints": [
-    "static/css/main.08a8843c.css",
+    "static/css/main.b8929aae.css",
     "static/js/main.926e4611.js"
   ]
 }
