@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="/btc/manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/btc/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/btc/icons/icon-192.png" />
+  <title>BTC</title>
+  <style>
+    :root { --bg: #000; --ink: rgba(255,255,255,.92); }
+    html, body {
+      height: 100%; margin: 0; background: var(--bg); overflow: hidden;
+      overscroll-behavior: none; touch-action: none;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+    }
+    .stage {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      box-sizing: border-box; user-select: none;
+      padding-left: calc(env(safe-area-inset-left) + 6vw);
+      padding-right: calc(env(safe-area-inset-right) + 6vw);
+      padding-top: calc(env(safe-area-inset-top) + 5vh);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 5vh);
+    }
+    .price {
+      color: var(--ink); font-weight: 700; line-height: .88; letter-spacing: -.045em;
+      font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "lnum" 1;
+      white-space: nowrap; will-change: font-size; overflow: visible;
+    }
+    .odometer {
+      display: inline-flex; align-items: baseline; justify-content: center; gap: 0; white-space: nowrap;
+    }
+    .digit {
+      position: relative; display: inline-block; width: .7em; height: 1em; line-height: 1em;
+      overflow: hidden; vertical-align: baseline; padding: 0 .02em; box-sizing: content-box;
+    }
+    .sep { width: .22em; display: inline-block; text-align: center; margin: 0 -.04em; opacity: .86; }
+    .track {
+      position: absolute; left: 0; top: 0; will-change: transform;
+      transform: translate3d(0, var(--y, 0em), 0);
+      transition: transform 520ms cubic-bezier(0.08,0.92,0.18,1);
+    }
+    .cell {
+      height: 1em; line-height: 1em; display: flex; align-items: center; justify-content: center;
+      padding-right: .03em; box-sizing: border-box;
+    }
+    .wm {
+      position: fixed;
+      right: 10px;
+      bottom: 8px;
+      color: rgba(255,255,255,.18);
+      font: 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .02em;
+      pointer-events: none;
+      user-select: none;
+      z-index: 9999;
+    }
+    @media (max-width: 430px) {
+      .stage {
+        padding-left: calc(env(safe-area-inset-left) + 9vw);
+        padding-right: calc(env(safe-area-inset-right) + 11vw);
+      }
+      .price { letter-spacing: -.040em; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div id="price" class="price odometer" aria-label="BTC price"></div>
+  </div>
+  <div class="wm">v=2026-03-04a</div>
+
+  <script>
+    const PRICE_API = "https://YOUR-WORKER.workers.dev/api/price";
+    const CACHE_KEY = 'last_price_str';
+    const CACHE_TS_KEY = 'last_price_ts';
+    const CACHE_TTL_MS = 10 * 60 * 1000;
+    const priceEl = document.getElementById('price');
+    const stageEl = document.querySelector('.stage');
+    const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+    const MIN_UPDATE_INTERVAL_MS = 1000;
+    const ENABLE_OVERSHOOT = false; // 默认关闭
+    const OVERSHOOT_EM = 0.03;      // 如需开启，最大只允许 0.03em
+
+    let inited = false;
+    let displayedText = '';
+    let lastLen = 0;
+    let pollTimer = null;
+
+    function freezeOdometer(el, freeze = true) {
+      el.querySelectorAll('.track').forEach(s => {
+        s.style.transitionDuration = freeze ? '0ms' : '';
+        s.style.transitionDelay = freeze ? '0ms' : '';
+      });
+    }
+
+    function offsetForDigit(digit, overshoot = 0) {
+      return `${-Number(digit) + overshoot}em`;
+    }
+
+    function buildOdometer(el, text) {
+      el.innerHTML = '';
+      for (const ch of text) {
+        if (ch >= '0' && ch <= '9') {
+          const digit = document.createElement('span');
+          digit.className = 'digit';
+          digit.dataset.value = ch;
+
+          const track = document.createElement('span');
+          track.className = 'track';
+          for (let i = 0; i <= 9; i++) {
+            const n = document.createElement('span');
+            n.className = 'cell';
+            n.textContent = String(i);
+            track.appendChild(n);
+          }
+
+          digit.appendChild(track);
+          el.appendChild(digit);
+          track.style.setProperty('--y', `${-Number(ch)}em`);
+        } else {
+          const sep = document.createElement('span');
+          sep.className = 'sep';
+          sep.textContent = ch;
+          el.appendChild(sep);
+        }
+      }
+    }
+
+    function fitPrice() {
+      const stage = stageEl.getBoundingClientRect();
+      const maxW = stage.width;
+      const maxH = stage.height;
+
+      let lo = 10, hi = 700;
+      while (hi - lo > 0.5) {
+        const mid = (lo + hi) / 2;
+        priceEl.style.fontSize = mid + 'px';
+        const r = priceEl.getBoundingClientRect();
+        if (r.width <= maxW * 0.995 && r.height <= maxH * 0.8) lo = mid;
+        else hi = mid;
+      }
+      priceEl.style.fontSize = lo + 'px';
+    }
+
+    function rebuildAndFit(text, animate = true) {
+      freezeOdometer(priceEl, true);
+      buildOdometer(priceEl, text);
+      fitPrice();
+      if (animate) {
+        requestAnimationFrame(() => freezeOdometer(priceEl, false));
+      }
+      displayedText = text;
+      lastLen = text.length;
+      inited = true;
+    }
+
+    function setOdometer(text) {
+      const children = Array.from(priceEl.children);
+      let digitIndex = 0;
+      const digitsCount = children.filter(n => n.classList?.contains('digit')).length;
+
+      for (let i = 0; i < text.length; i++) {
+        const target = text[i];
+        const node = children[i];
+        if (!node) break;
+
+        if (node.classList.contains('digit')) {
+          const track = node.querySelector('.track');
+          const reverseOrder = digitsCount - 1 - digitIndex;
+          const delay = Math.min(120, 18 * reverseOrder);
+          track.style.transitionDelay = `${delay}ms`;
+          if (node.dataset.value !== target) {
+            const prev = Number(node.dataset.value);
+            const next = Number(target);
+            node.dataset.value = target;
+
+            // 两帧提交：先无动画落在旧位，强制生效；下一帧再开动画到新位
+            track.style.transition = 'none';
+            track.style.setProperty('--y', offsetForDigit(prev));
+            track.getBoundingClientRect(); // force reflow
+
+            requestAnimationFrame(() => {
+              track.style.transition = '';
+              track.style.transitionDelay = `${delay}ms`;
+
+              if (ENABLE_OVERSHOOT) {
+                const sign = next >= prev ? -1 : 1;
+                const overshoot = Math.max(-OVERSHOOT_EM, Math.min(OVERSHOOT_EM, sign * OVERSHOOT_EM));
+                track.style.setProperty('--y', offsetForDigit(next, overshoot));
+                requestAnimationFrame(() => {
+                  track.style.setProperty('--y', offsetForDigit(next));
+                });
+              } else {
+                track.style.setProperty('--y', offsetForDigit(next));
+              }
+            });
+          }
+          digitIndex++;
+        } else {
+          node.textContent = target;
+        }
+      }
+      displayedText = text;
+    }
+
+    function renderText(text, { animate = true } = {}) {
+      text = String(text).replace(/,\s+/g, ',');
+
+      if (!inited) {
+        rebuildAndFit(text, animate);
+        return;
+      }
+
+      if (text === displayedText) return; // 相同值：不动画、不重建
+
+      if (text.length !== lastLen) {
+        rebuildAndFit(text, animate);
+        return;
+      }
+
+      setOdometer(text); // 同位数，仅变化位滚动
+    }
+
+    function formatFromPriceStr(priceStr) {
+      const n = Number(priceStr);
+      if (!Number.isFinite(n)) return null;
+      return fmt.format(Math.round(n));
+    }
+
+    function warmStart() {
+      const cachedRaw = localStorage.getItem(CACHE_KEY);
+      const cachedTsRaw = localStorage.getItem(CACHE_TS_KEY);
+      const cachedTs = Number(cachedTsRaw);
+      const now = Date.now();
+      const isExpired = !Number.isFinite(cachedTs) || (now - cachedTs > CACHE_TTL_MS);
+
+      if (!isExpired && cachedRaw) {
+        const cachedText = formatFromPriceStr(cachedRaw);
+        if (cachedText) {
+          renderText(cachedText, { animate: false }); // 未过期缓存：立刻显示，不动画
+          return;
+        }
+      }
+
+      renderText('--', { animate: false }); // 过期或无缓存：显示 --
+    }
+
+    async function fetchPriceRaw() {
+      const res = await fetch(PRICE_API, { cache: 'no-store' });
+      if (!res.ok) throw new Error('price http ' + res.status);
+      const data = await res.json();
+      const raw = String(data?.price ?? '');
+      if (!raw || !Number.isFinite(Number(raw))) throw new Error('bad price');
+      return raw;
+    }
+
+    async function tick() {
+      try {
+        const raw = await fetchPriceRaw();
+        const text = formatFromPriceStr(raw);
+        if (text) {
+          renderText(text, { animate: true });
+          localStorage.setItem(CACHE_KEY, raw); // success 时更新缓存价格
+          localStorage.setItem(CACHE_TS_KEY, String(Date.now())); // success 时更新时间戳
+        }
+      } catch (_) {
+        // fail: 保持当前显示，不归零不闪烁
+      }
+    }
+
+    async function pollLoop() {
+      await tick();
+      pollTimer = setTimeout(pollLoop, MIN_UPDATE_INTERVAL_MS); // 固定 >= 1000ms
+    }
+
+    function start() {
+      warmStart();      // startup: 同步显示缓存或 '--'
+      tick();           // DOMContentLoaded 后立刻请求
+      pollTimer = setTimeout(pollLoop, MIN_UPDATE_INTERVAL_MS);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+      start();
+    }
+
+    window.addEventListener('orientationchange', () => {
+      if (inited) setTimeout(fitPrice, 80);
+    });
+    window.addEventListener('pageshow', () => {
+      if (inited) setTimeout(fitPrice, 80);
+    });
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('/btc/sw.js', { scope: '/btc/' });
+          reg.update();
+        } catch (_) {}
+      });
+    }
+  </script>
+</body>
+</html>
