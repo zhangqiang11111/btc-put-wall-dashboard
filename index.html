@@ -1,175 +1,447 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0e1a" />
 <title>BTC</title>
 
 <style>
+  :root{
+    --bg-start:#141c2e;
+    --bg-mid:#0f1625;
+    --bg-end:#0a0e1a;
 
-:root{
-  --bg-start:#141c2e;
-  --bg-mid:#0f1625;
-  --bg-end:#0a0e1a;
-}
+    /* 动画（终局） */
+    --dur:520ms;
+    --ease:cubic-bezier(0.08,0.92,0.18,1);
+    --min-interval:1000;
 
-html,body{
-  margin:0;
-  height:100%;
-  overflow:hidden;
+    /* 视觉（更狠但克制） */
+    --pad:clamp(16px, 3.2vw, 44px);
+    --breath:1; /* 1=开呼吸，0=关 */
+  }
 
-  background:
-  radial-gradient(circle at 50% 30%,var(--bg-start),var(--bg-mid) 60%,var(--bg-end));
+  html,body{
+    height:100%;
+    margin:0;
+    overflow:hidden;
+    touch-action:none;
+    -webkit-tap-highlight-color: transparent;
 
-  color:#f1f5f9;
+    background: radial-gradient(1200px 800px at 50% 20%, var(--bg-start), var(--bg-mid) 45%, var(--bg-end));
+    color:#f1f5f9;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+  }
 
-  font-family:
-  -apple-system,
-  BlinkMacSystemFont,
-  "SF Pro Display",
-  "Helvetica Neue",
-  Helvetica,
-  Arial,
-  sans-serif;
+  .wrap{
+    height:100%;
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: calc(var(--pad) + env(safe-area-inset-top))
+             calc(var(--pad) + env(safe-area-inset-right))
+             calc(var(--pad) + env(safe-area-inset-bottom))
+             calc(var(--pad) + env(safe-area-inset-left));
+    box-sizing:border-box;
+  }
 
-}
+  /* 价格容器：永远中心，永不出边（字号由JS算） */
+  .price{
+    position:relative;
+    display:inline-flex;
+    align-items:baseline;
+    justify-content:center;
+    gap:0;
+    user-select:none;
+    -webkit-user-select:none;
+    line-height:1;
 
-#price{
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
+    /* 远距可读：更厚一点 */
+    font-weight:600;
+    letter-spacing:-0.02em;
 
-  display:flex;
-  align-items:baseline;
+    /* 关键：不要让任何父级裁切数字（否则“刀切感”） */
+    overflow:visible;
 
-  font-weight:500;
-  letter-spacing:-0.02em;
-}
+    /* 数字等宽 */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:"tnum" 1, "lnum" 1;
 
-.digit{
-  position:relative;
-  overflow:hidden;
+    /* 呼吸：只做整体的微呼吸，不动容器位置 */
+    transform: translateZ(0);
+    will-change: transform, filter;
+  }
 
-  font-size:22vw;
-  line-height:1;
+  /* 光影渐变（两层叠加，GPU友好） */
+  .glow{
+    position:absolute;
+    inset:-20%;
+    pointer-events:none;
+    opacity:.55;
+    filter: blur(26px);
+    background:
+      radial-gradient(closest-side at 42% 45%, rgba(255,255,255,.22), transparent 55%),
+      radial-gradient(closest-side at 62% 52%, rgba(120,180,255,.18), transparent 60%),
+      radial-gradient(closest-side at 50% 60%, rgba(0,0,0,.55), transparent 70%);
+    transform: translateZ(0);
+    will-change: transform, opacity;
+  }
 
-  width:.62em;
-  height:1em;
-}
+  /* 数字本体：背景裁切成“金属感” */
+  .ink{
+    position:relative;
+    display:inline-flex;
+    align-items:baseline;
+    justify-content:center;
+    gap:0;
 
-.digit span{
-  position:absolute;
-  left:0;
-  right:0;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.98) 0%,
+        rgba(255,255,255,.92) 38%,
+        rgba(220,235,255,.86) 62%,
+        rgba(255,255,255,.95) 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
 
-  display:flex;
-  align-items:center;
-  justify-content:center;
+    /* 细微立体边缘 */
+    text-shadow:
+      0 1px 0 rgba(0,0,0,.20),
+      0 18px 38px rgba(0,0,0,.28);
+  }
 
-  transition:
-  transform 420ms cubic-bezier(.25,.1,.25,1),
-  opacity 420ms cubic-bezier(.25,.1,.25,1);
-}
+  /* 每一位：窗口裁切 */
+  .digit{
+    position:relative;
+    display:inline-block;
+    height:1em;
+    line-height:1em;
+    overflow:hidden;         /* 窗口不漏光 */
+    vertical-align:baseline;
 
-.sep{
-  font-size:22vw;
-  margin:0 .05em;
-}
+    /* 列宽护城河：防被切 */
+    width:0.72em;
+    padding:0 0.06em;
+    box-sizing:content-box;
+  }
 
-#ver{
-  position:absolute;
-  bottom:16px;
-  right:18px;
+  /* 轨道：纯 transform，GPU */
+  .track{
+    position:absolute;
+    left:0;
+    top:0;
+    will-change:transform;
+    transform: translate3d(0, var(--y, 0), 0);
+  }
 
-  opacity:.35;
-  font-size:18px;
-}
+  .cell{
+    height:1em;
+    line-height:1em;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
 
+  .sep{
+    display:inline-block;
+    width:0.35em;
+    text-align:center;
+    opacity:.95;
+    margin-left:-0.02em;
+    margin-right:-0.02em;
+    color:rgba(255,255,255,.88); /* 逗号不吃渐变，保持干净 */
+  }
+
+  .badge{
+    position:fixed;
+    right:10px;
+    bottom:10px;
+    opacity:.18;
+    font:12px -apple-system,BlinkMacSystemFont,system-ui;
+    z-index:9999;
+    pointer-events:none;
+    color:rgba(255,255,255,.9);
+  }
+
+  .hint{
+    position:fixed;
+    left:10px;
+    bottom:10px;
+    opacity:.18;
+    font:12px -apple-system,BlinkMacSystemFont,system-ui;
+    z-index:9999;
+    pointer-events:none;
+    color:rgba(255,255,255,.9);
+  }
+
+  /* 呼吸动画（景深微呼吸：克制，不回弹） */
+  @keyframes breath {
+    0%   { transform: translateZ(0) scale(1);     filter: blur(0px); }
+    50%  { transform: translateZ(0) scale(1.006); filter: blur(0.18px); }
+    100% { transform: translateZ(0) scale(1);     filter: blur(0px); }
+  }
+  .breathing{
+    animation: breath 5.6s ease-in-out infinite;
+  }
+
+  /* 减少动态：系统设置尊重 */
+  @media (prefers-reduced-motion: reduce){
+    .breathing{ animation:none !important; }
+    .track{ transition:none !important; }
+  }
 </style>
 </head>
 
 <body>
+  <div class="wrap">
+    <div id="priceBox" class="price">
+      <div class="glow"></div>
+      <div id="price" class="ink" aria-label="BTC Price"></div>
+    </div>
+  </div>
 
-<div id="price"></div>
-
-<div id="ver">v=2026-03-04d</div>
+  <div class="badge">v=2026-03-04e</div>
+  <div id="hint" class="hint"></div>
 
 <script>
+(() => {
+  // ====== 终局参数（锁死） ======
+  const MIN_UPDATE_INTERVAL_MS = 1000;
+  const CACHE_KEY = "last_price_str";
+  const TS_KEY = "last_price_ts";
+  const STALE_MS = 10 * 60 * 1000;
 
-const container=document.getElementById("price")
+  // GitHub Pages：直连 Binance（国内被墙就只能代理/机场）
+  const PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
 
-let prev=""
+  const root = document.documentElement;
+  const DUR = (getComputedStyle(root).getPropertyValue("--dur").trim() || "520ms");
+  const EASE = (getComputedStyle(root).getPropertyValue("--ease").trim() || "cubic-bezier(0.08,0.92,0.18,1)");
+  const TRANSITION = `transform ${DUR} ${EASE}`;
 
-function render(price){
+  const priceBox = document.getElementById("priceBox");
+  const elPrice = document.getElementById("price");
+  const elHint = document.getElementById("hint");
 
-let str=Number(price).toLocaleString()
+  let lastFetchAt = 0;
+  let lastShown = null;        // "68338"
+  let currentDigits = [];      // [{track}]
+  let currentTemplate = "";    // "68,338"
 
-if(str===prev)return
+  // 呼吸开关
+  const breathOn = (Number(getComputedStyle(root).getPropertyValue("--breath").trim() || "1") === 1);
+  if (breathOn) priceBox.classList.add("breathing");
 
-container.innerHTML=""
+  const now = () => Date.now();
 
-for(let i=0;i<str.length;i++){
+  function formatIntString(nStr){
+    const s = String(nStr).replace(/[^\d]/g, "");
+    if (!s) return "--";
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
 
-let c=str[i]
+  function isStale(ts){
+    if (!ts) return true;
+    const t = Number(ts);
+    if (!Number.isFinite(t)) return true;
+    return (now() - t) > STALE_MS;
+  }
 
-if(c===","){
-let s=document.createElement("div")
-s.className="sep"
-s.innerText=","
-container.appendChild(s)
-continue
-}
+  function fitToScreen(template){
+    // 真实测量：让数字尽可能铺满，但永不出边
+    const targetW = Math.floor(window.innerWidth  * 0.993);
+    const targetH = Math.floor(window.innerHeight * 0.82);
 
-let d=document.createElement("div")
-d.className="digit"
+    // 用纯文本测量（不建DOM轨道，快且稳定）
+    elPrice.style.fontSize = "10px";
+    elPrice.textContent = template;
+    const measure = () => elPrice.getBoundingClientRect();
 
-let old=document.createElement("span")
-old.innerText=prev[i]||c
-old.style.transform="translateY(0)"
+    let lo = 10, hi = 8000, best = 10;
+    for (let i=0;i<18;i++){
+      const mid = (lo + hi) >> 1;
+      elPrice.style.fontSize = mid + "px";
+      const r = measure();
+      const ok = (r.width <= targetW) && (r.height <= targetH);
+      if (ok){ best = mid; lo = mid + 1; }
+      else { hi = mid - 1; }
+    }
 
-let neu=document.createElement("span")
-neu.innerText=c
-neu.style.transform="translateY(100%)"
+    elPrice.style.fontSize = best + "px";
+    elPrice.textContent = "";
+  }
 
-d.appendChild(old)
-d.appendChild(neu)
+  function build(template){
+    elPrice.innerHTML = "";
+    currentDigits = [];
+    currentTemplate = template;
 
-container.appendChild(d)
+    fitToScreen(template);
 
-requestAnimationFrame(()=>{
-old.style.transform="translateY(-100%)"
-neu.style.transform="translateY(0)"
-})
+    for (const ch of template){
+      if (ch === ","){
+        const sep = document.createElement("span");
+        sep.className = "sep";
+        sep.textContent = ",";
+        elPrice.appendChild(sep);
+      } else if (/\d/.test(ch)) {
+        const digit = document.createElement("span");
+        digit.className = "digit";
 
-}
+        const track = document.createElement("span");
+        track.className = "track";
 
-prev=str
-}
+        for (let i=0;i<=9;i++){
+          const cell = document.createElement("span");
+          cell.className = "cell";
+          cell.textContent = String(i);
+          track.appendChild(cell);
+        }
 
-async function fetchPrice(){
+        digit.appendChild(track);
+        elPrice.appendChild(digit);
+        currentDigits.push({track});
+      }
+    }
+  }
 
-try{
+  function offsetForDigit(d){
+    const n = Number(d);
+    return (-n) + "em";
+  }
 
-let r=await fetch(
-"https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-{cache:"no-store"}
-)
+  function setAllInstant(intStr){
+    const templ = formatIntString(intStr);
+    if (templ !== currentTemplate) build(templ);
 
-let j=await r.json()
+    let idx = 0;
+    for (const ch of templ){
+      if (!/\d/.test(ch)) continue;
+      const {track} = currentDigits[idx++];
+      track.style.transition = "none";
+      track.style.setProperty("--y", offsetForDigit(ch));
+    }
+    lastShown = intStr;
+  }
 
-render(j.price)
+  function animateTo(intStr){
+    const templ = formatIntString(intStr);
+    const prevTempl = currentTemplate;
 
-}catch(e){}
+    // 位数/逗号结构变化：rebuild + fit
+    if (templ.length !== prevTempl.length){
+      build(templ);
+      setAllInstant(intStr);
+      return;
+    }
 
-}
+    // 只动变化位 + 两帧提交（防起步咯噔）
+    const prevDigits = (prevTempl.match(/\d/g) || []);
+    let idx = 0;
+    let changed = false;
 
-fetchPrice()
+    for (let i=0;i<templ.length;i++){
+      const ch = templ[i];
+      if (!/\d/.test(ch)) continue;
 
-setInterval(fetchPrice,2000)
+      const {track} = currentDigits[idx];
+      const prevDigit = prevDigits[idx] || ch;
+      const nextDigit = ch;
 
+      if (prevDigit !== nextDigit){
+        changed = true;
+
+        const oldY = offsetForDigit(prevDigit);
+        const newY = offsetForDigit(nextDigit);
+
+        track.style.transition = "none";
+        track.style.setProperty("--y", oldY);
+        track.getBoundingClientRect();
+
+        requestAnimationFrame(() => {
+          track.style.transition = TRANSITION;
+          track.style.setProperty("--y", newY);
+        });
+      }
+      idx++;
+    }
+
+    if (!changed) return;
+
+    currentTemplate = templ;
+    lastShown = intStr;
+  }
+
+  function renderPlaceholder(){
+    elPrice.innerHTML = "";
+    fitToScreen("--");
+    elPrice.textContent = "--";
+  }
+
+  async function fetchPrice(){
+    const r = await fetch(PRICE_API, { cache:"no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    const p = String(j.price || "").trim();
+    // 去小数点：只取整数部分
+    const intPart = p.split(".")[0].replace(/[^\d]/g,"");
+    if (!intPart) throw new Error("bad price");
+    return intPart;
+  }
+
+  async function tick(){
+    const t = now();
+    if (t - lastFetchAt < MIN_UPDATE_INTERVAL_MS) return;
+    lastFetchAt = t;
+
+    try{
+      const nextInt = await fetchPrice();
+
+      localStorage.setItem(CACHE_KEY, nextInt);
+      localStorage.setItem(TS_KEY, String(now()));
+
+      if (lastShown === null){
+        setAllInstant(nextInt);
+        return;
+      }
+      if (nextInt !== lastShown){
+        animateTo(nextInt);
+      }
+    }catch(e){
+      if (lastShown === null) renderPlaceholder();
+      elHint.textContent = "offline";
+      setTimeout(()=>{ elHint.textContent=""; }, 1200);
+    }
+  }
+
+  function boot(){
+    const cached = localStorage.getItem(CACHE_KEY);
+    const ts = localStorage.getItem(TS_KEY);
+
+    if (cached && !isStale(ts)) setAllInstant(cached);
+    else renderPlaceholder();
+
+    tick();
+    setInterval(tick, MIN_UPDATE_INTERVAL_MS);
+  }
+
+  // 尺寸变化：只重算字号+重建当前结构（无动画）
+  window.addEventListener("resize", () => {
+    if (lastShown) setAllInstant(lastShown);
+    else renderPlaceholder();
+  }, { passive:true });
+
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot, { once:true });
+  } else {
+    boot();
+  }
+})();
 </script>
-
 </body>
 </html>
