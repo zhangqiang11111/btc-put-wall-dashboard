@@ -7,6 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0e1a" />
 <title>BTC</title>
+
 <style>
   :root{
     --bg-start:#141c2e;
@@ -15,7 +16,8 @@
     --ink:#f1f5f9;
     --muted:rgba(255,255,255,.55);
 
-    --dur:520ms;
+    /* 动画（终局） */
+    --dur:600ms;
     --ease:cubic-bezier(0.08,0.92,0.18,1);
 
     --pad:clamp(16px, 3.5vw, 42px);
@@ -29,6 +31,7 @@
     overflow:hidden;
     touch-action:none;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,"PingFang SC","Helvetica Neue",Arial,sans-serif;
   }
 
@@ -55,18 +58,19 @@
     font-feature-settings:"tnum" 1, "lnum" 1;
     letter-spacing:-0.02em;
     line-height:1;
+    padding:0 0.06em; /* 护城河：防 iOS/Chrome 轻微裁切 */
   }
 
-  /* 每一位：窗口裁切 */
+  /* 每一位：窗口裁切（关键：不漏光） */
   .digit{
     position:relative;
     display:inline-block;
     height:1em;
     line-height:1em;
-    overflow:hidden;         /* 关键：窗口不漏光 */
+    overflow:hidden;
     vertical-align:baseline;
-    width:0.72em;            /* 列宽护城河 */
-    padding:0 0.06em;        /* 右侧缓冲防“刀切感” */
+    width:0.72em;
+    padding:0 0.06em;
     box-sizing:content-box;
   }
 
@@ -89,10 +93,10 @@
 
   .sep{
     display:inline-block;
-    width:0.35em;
+    width:0.34em;
     text-align:center;
     opacity:.95;
-    margin-left:-0.02em; /* 逗号紧贴一点点 */
+    margin-left:-0.02em;
     margin-right:-0.02em;
   }
 
@@ -117,12 +121,14 @@
   }
 </style>
 </head>
+
 <body>
-  <div class="wrap">
+  <div id="wrap" class="wrap">
     <div id="price" class="price" aria-label="BTC Price"></div>
   </div>
 
-  <div class="badge">v=2026-03-04a</div>
+  <!-- 版本号：用它判断是否命中新包 -->
+  <div class="badge">v=2026-03-04b</div>
   <div id="hint" class="hint"></div>
 
 <script>
@@ -133,32 +139,26 @@
   const TS_KEY = "last_price_ts";
   const STALE_MS = 10 * 60 * 1000;
 
-  // GitHub Pages 不能同源代理，只能直连（被墙则需要代理）
-  // 你以后若有 Worker/VPS 代理，把这里换成你自己的 https://.../api/price
+  // GitHub Pages 无同源 /api/price，只能直连 Binance（被墙则需要代理）
   const PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
 
-  const DUR = getComputedStyle(document.documentElement).getPropertyValue("--dur").trim() || "520ms";
-  const EASE = getComputedStyle(document.documentElement).getPropertyValue("--ease").trim() || "cubic-bezier(0.08,0.92,0.18,1)";
+  const rootStyle = getComputedStyle(document.documentElement);
+  const DUR = rootStyle.getPropertyValue("--dur").trim() || "600ms";
+  const EASE = rootStyle.getPropertyValue("--ease").trim() || "cubic-bezier(0.08,0.92,0.18,1)";
   const TRANSITION = `transform ${DUR} ${EASE}`;
 
+  const elWrap = document.getElementById("wrap");
   const elPrice = document.getElementById("price");
   const elHint = document.getElementById("hint");
 
   let lastFetchAt = 0;
-  let lastShown = null;  // string like "68338"
-  let currentDigits = []; // DOM refs for digits
-  let currentTemplate = ""; // template string with commas (e.g. "68,338")
+  let lastShown = null;       // "68338"
+  let currentDigits = [];     // [{digit, track}]
+  let currentTemplate = "";   // "68,338"
+  let digitsOnlyPrev = "";    // 上一次 template 的纯数字序列（用于比较每一位）
 
   // ====== 工具 ======
   const now = () => Date.now();
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-  function formatIntString(nStr){
-    // nStr: "68338" -> "68,338"
-    const s = String(nStr).replace(/[^\d]/g, "");
-    if (!s) return "--";
-    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  }
 
   function isStale(ts){
     if (!ts) return true;
@@ -167,27 +167,38 @@
     return (now() - t) > STALE_MS;
   }
 
-  function fitToScreen(template){
-    // 动态字号：用二分搜索测量宽度，让它铺满但不出边
-    const targetW = Math.floor(window.innerWidth * 0.995);
-    const targetH = Math.floor(window.innerHeight * 0.80);
+  function formatIntString(nStr){
+    const s = String(nStr).replace(/[^\d]/g, "");
+    if (!s) return "--";
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
 
-    // 临时测量容器
+  function offsetForDigit(d){
+    const n = Number(d);
+    return (-n) + "em";
+  }
+
+  function fitToScreen(template){
+    // 关键修复：用 wrap 的可用空间，不用 window.innerWidth（否则会无视 padding/safe-area，导致出屏）
+    const availW = Math.max(10, Math.floor(elWrap.clientWidth  * 0.995));
+    const availH = Math.max(10, Math.floor(elWrap.clientHeight * 0.80));
+
+    // 用纯文本测量（不会触发数字滚动，也不会“整行闪”）
     elPrice.style.fontSize = "10px";
     elPrice.textContent = template;
-    const meas = () => elPrice.getBoundingClientRect();
 
     let lo = 10, hi = 4000, best = 10;
-    for (let i=0;i<16;i++){
-      const mid = Math.floor((lo+hi)/2);
+    for (let i=0;i<18;i++){
+      const mid = (lo + hi) >> 1;
       elPrice.style.fontSize = mid + "px";
-      const r = meas();
-      const ok = (r.width <= targetW) && (r.height <= targetH);
+      const r = elPrice.getBoundingClientRect();
+      const ok = (r.width <= availW) && (r.height <= availH);
       if (ok){ best = mid; lo = mid + 1; }
       else { hi = mid - 1; }
     }
+
     elPrice.style.fontSize = best + "px";
-    elPrice.textContent = ""; // 还原
+    elPrice.textContent = ""; // 还原给 build 用
   }
 
   function build(template){
@@ -195,11 +206,12 @@
     elPrice.innerHTML = "";
     currentDigits = [];
     currentTemplate = template;
+    digitsOnlyPrev = (template.match(/\d/g) || []).join("");
 
     // 先 fit（用纯文本测）
     fitToScreen(template);
 
-    // 再按 template 生成 DOM
+    // 再生成 DOM
     for (const ch of template){
       if (ch === ","){
         const sep = document.createElement("span");
@@ -213,19 +225,16 @@
         const track = document.createElement("span");
         track.className = "track";
 
-        // 0-9 轨道
         for (let i=0;i<=9;i++){
           const cell = document.createElement("span");
           cell.className = "cell";
           cell.textContent = String(i);
           track.appendChild(cell);
         }
-        // 默认 y=0 (显示0)，但我们会立即 set 到真实值
         digit.appendChild(track);
         elPrice.appendChild(digit);
         currentDigits.push({digit, track});
       } else {
-        // fallback
         const t = document.createElement("span");
         t.textContent = ch;
         elPrice.appendChild(t);
@@ -233,86 +242,68 @@
     }
   }
 
-  function offsetForDigit(d){
-    // d is char "0"-"9"
-    const n = Number(d);
-    // y: 0 -> 0em, 1 -> -1em ...
-    return (-n) + "em";
-  }
-
   function setAllInstant(intStr){
-    // intStr: "68338"
     const templ = formatIntString(intStr);
     if (templ !== currentTemplate){
       build(templ);
     }
-    // 逐个 digit 设置到对应数（无动画）
+
     let idx = 0;
     for (const ch of templ){
-      if (/\d/.test(ch)){
-        const {track} = currentDigits[idx++];
-        track.style.transition = "none";
-        track.style.setProperty("--y", offsetForDigit(ch));
-      }
+      if (!/\d/.test(ch)) continue;
+      const {track} = currentDigits[idx++];
+      track.style.transition = "none";
+      track.style.setProperty("--y", offsetForDigit(ch));
     }
+
+    digitsOnlyPrev = (templ.match(/\d/g) || []).join("");
     lastShown = intStr;
   }
 
   function animateTo(intStr){
-    // 只动变化位 + 两帧提交（防起步咯噔）
     const templ = formatIntString(intStr);
-    const prevTempl = currentTemplate;
 
-    // 位数变化/千分位变化 → rebuild + fit
-    if (templ.length !== prevTempl.length){
+    // 位数变化/逗号结构变化 → rebuild + fit
+    if (templ.length !== currentTemplate.length){
       build(templ);
-      // rebuild 后先瞬间落到 prev 或者当前（用当前更稳）
       setAllInstant(intStr);
       return;
     }
 
-    // template一致，不 rebuild，只对变化位滚动
-    // 注意：templ含逗号，我们按 digit 序列对齐
-    let idx = 0;
+    const digitsOnlyNext = (templ.match(/\d/g) || []).join("");
+    if (!digitsOnlyNext) return;
+
     let changed = false;
+    for (let i=0;i<digitsOnlyNext.length;i++){
+      const prevD = digitsOnlyPrev[i] || "0";
+      const nextD = digitsOnlyNext[i];
+      if (prevD === nextD) continue;
 
-    for (let i=0;i<templ.length;i++){
-      const ch = templ[i];
-      if (!/\d/.test(ch)) continue;
+      changed = true;
+      const {track} = currentDigits[i];
 
-      const {track} = currentDigits[idx];
-      const prevDigitChar = (prevTempl.match(/\d/g) || [])[idx] || "0";
-      const nextDigitChar = ch;
+      const oldY = offsetForDigit(prevD);
+      const newY = offsetForDigit(nextD);
 
-      if (prevDigitChar !== nextDigitChar){
-        changed = true;
+      // Two-Frame Commit：专治起步“咯噔”
+      track.style.transition = "none";
+      track.style.setProperty("--y", oldY);
+      track.getBoundingClientRect(); // force reflow
 
-        const oldY = offsetForDigit(prevDigitChar);
-        const newY = offsetForDigit(nextDigitChar);
-
-        // Two-Frame Commit
-        track.style.transition = "none";
-        track.style.setProperty("--y", oldY);
-        track.getBoundingClientRect(); // force reflow
-
-        requestAnimationFrame(() => {
-          track.style.transition = TRANSITION;
-          track.style.setProperty("--y", newY);
-        });
-      }
-      idx++;
+      requestAnimationFrame(() => {
+        track.style.transition = TRANSITION;
+        track.style.setProperty("--y", newY);
+      });
     }
 
-    if (!changed){
-      // 不变：不做任何DOM写入（铁律）
-      return;
-    }
-
+    if (!changed) return;
     currentTemplate = templ;
+    digitsOnlyPrev = digitsOnlyNext;
     lastShown = intStr;
   }
 
   function renderPlaceholder(){
+    // 首屏永不 0：只 --（并且也铺满）
     elPrice.innerHTML = "";
     fitToScreen("--");
     elPrice.textContent = "--";
@@ -324,7 +315,6 @@
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     const p = String(j.price || "").trim();
-    // 取整数部分
     const intPart = p.split(".")[0].replace(/[^\d]/g,"");
     if (!intPart) throw new Error("bad price");
     return intPart;
@@ -337,11 +327,12 @@
 
     try{
       const nextInt = await fetchPrice();
+
       // 成功：写缓存
       localStorage.setItem(CACHE_KEY, nextInt);
       localStorage.setItem(TS_KEY, String(now()));
 
-      // 首次真实价：与当前一致不动画
+      // 首次真实价：直接落位（无动画）
       if (lastShown === null){
         setAllInstant(nextInt);
         return;
@@ -352,19 +343,17 @@
         animateTo(nextInt);
       }
     }catch(e){
-      // 失败：保持当前显示（铁律）
-      // 首屏且无缓存：显示 --
+      // 失败：保持当前显示（不闪、不归零）
       if (lastShown === null){
         renderPlaceholder();
       }
-      // 轻提示（不影响主视觉）
       elHint.textContent = "offline";
       setTimeout(()=>{ elHint.textContent=""; }, 1200);
     }
   }
 
   function boot(){
-    // 启动：warm start（缓存价 -> --），并立即请求
+    // warm start：缓存价（未过期）→ 立即渲染（无动画）；否则 --
     const cached = localStorage.getItem(CACHE_KEY);
     const ts = localStorage.getItem(TS_KEY);
 
@@ -374,16 +363,14 @@
       renderPlaceholder();
     }
 
-    // DOMContentLoaded 立即拉取（你要的速度）
+    // 立刻拉取 + 固定 1000ms
     tick();
     setInterval(tick, MIN_UPDATE_INTERVAL_MS);
   }
 
-  // 横竖屏/尺寸变化：只 fit，不 rebuild（除非位数变化触发 rebuild）
+  // 旋转/尺寸变化：重算字号并无动画落位（不乱抖）
   window.addEventListener("resize", () => {
     if (lastShown){
-      // 重新 fit 并 rebuild 当前模板（因为字号需要重新测量）
-      // 但不改变位数结构，不触发滚动动画
       setAllInstant(lastShown);
     } else {
       renderPlaceholder();
