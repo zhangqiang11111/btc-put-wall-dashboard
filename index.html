@@ -14,14 +14,11 @@
     --bg-mid:#0f1625;
     --bg-end:#0a0e1a;
 
-    /* 动画（终局） */
     --dur:520ms;
     --ease:cubic-bezier(0.08,0.92,0.18,1);
-    --min-interval:1000;
-
-    /* 视觉（更狠但克制） */
     --pad:clamp(16px, 3.2vw, 44px);
-    --breath:1; /* 1=开呼吸，0=关 */
+
+    --breath:1; /* 1=开呼吸 0=关 */
   }
 
   html,body{
@@ -49,7 +46,6 @@
     box-sizing:border-box;
   }
 
-  /* 价格容器：永远中心，永不出边（字号由JS算） */
   .price{
     position:relative;
     display:inline-flex;
@@ -59,60 +55,40 @@
     user-select:none;
     -webkit-user-select:none;
     line-height:1;
+    overflow:visible;
 
-    /* 远距可读：更厚一点 */
     font-weight:600;
     letter-spacing:-0.02em;
 
-    /* 关键：不要让任何父级裁切数字（否则“刀切感”） */
-    overflow:visible;
-
-    /* 数字等宽 */
     font-variant-numeric: tabular-nums;
     font-feature-settings:"tnum" 1, "lnum" 1;
 
-    /* 呼吸：只做整体的微呼吸，不动容器位置 */
     transform: translateZ(0);
     will-change: transform, filter;
   }
 
-  /* 光影渐变（两层叠加，GPU友好） */
+  /* 光影：只做背景氛围，不碰字形 */
   .glow{
     position:absolute;
-    inset:-20%;
+    inset:-18%;
     pointer-events:none;
     opacity:.55;
     filter: blur(26px);
     background:
-      radial-gradient(closest-side at 42% 45%, rgba(255,255,255,.22), transparent 55%),
-      radial-gradient(closest-side at 62% 52%, rgba(120,180,255,.18), transparent 60%),
-      radial-gradient(closest-side at 50% 60%, rgba(0,0,0,.55), transparent 70%);
+      radial-gradient(closest-side at 42% 45%, rgba(255,255,255,.18), transparent 55%),
+      radial-gradient(closest-side at 64% 52%, rgba(120,180,255,.16), transparent 60%),
+      radial-gradient(closest-side at 50% 62%, rgba(0,0,0,.55), transparent 70%);
     transform: translateZ(0);
     will-change: transform, opacity;
   }
 
-  /* 数字本体：背景裁切成“金属感” */
+  /* 承载DOM（不要做渐变） */
   .ink{
     position:relative;
     display:inline-flex;
     align-items:baseline;
     justify-content:center;
     gap:0;
-
-    background:
-      linear-gradient(180deg,
-        rgba(255,255,255,.98) 0%,
-        rgba(255,255,255,.92) 38%,
-        rgba(220,235,255,.86) 62%,
-        rgba(255,255,255,.95) 100%);
-    -webkit-background-clip:text;
-    background-clip:text;
-    color:transparent;
-
-    /* 细微立体边缘 */
-    text-shadow:
-      0 1px 0 rgba(0,0,0,.20),
-      0 18px 38px rgba(0,0,0,.28);
   }
 
   /* 每一位：窗口裁切 */
@@ -121,10 +97,9 @@
     display:inline-block;
     height:1em;
     line-height:1em;
-    overflow:hidden;         /* 窗口不漏光 */
+    overflow:hidden;
     vertical-align:baseline;
 
-    /* 列宽护城河：防被切 */
     width:0.72em;
     padding:0 0.06em;
     box-sizing:content-box;
@@ -139,14 +114,31 @@
     transform: translate3d(0, var(--y, 0), 0);
   }
 
+  /* ✅ 关键修复：渐变必须写在“字形本体”上（每个 .cell） */
   .cell{
     height:1em;
     line-height:1em;
     display:flex;
     align-items:center;
     justify-content:center;
+
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.98) 0%,
+        rgba(255,255,255,.92) 38%,
+        rgba(220,235,255,.86) 62%,
+        rgba(255,255,255,.95) 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    -webkit-text-fill-color: transparent;
+
+    text-shadow:
+      0 1px 0 rgba(0,0,0,.20),
+      0 18px 38px rgba(0,0,0,.28);
   }
 
+  /* 逗号：实色更干净 */
   .sep{
     display:inline-block;
     width:0.35em;
@@ -154,7 +146,7 @@
     opacity:.95;
     margin-left:-0.02em;
     margin-right:-0.02em;
-    color:rgba(255,255,255,.88); /* 逗号不吃渐变，保持干净 */
+    color:rgba(255,255,255,.90);
   }
 
   .badge{
@@ -179,17 +171,13 @@
     color:rgba(255,255,255,.9);
   }
 
-  /* 呼吸动画（景深微呼吸：克制，不回弹） */
   @keyframes breath {
     0%   { transform: translateZ(0) scale(1);     filter: blur(0px); }
     50%  { transform: translateZ(0) scale(1.006); filter: blur(0.18px); }
     100% { transform: translateZ(0) scale(1);     filter: blur(0px); }
   }
-  .breathing{
-    animation: breath 5.6s ease-in-out infinite;
-  }
+  .breathing{ animation: breath 5.6s ease-in-out infinite; }
 
-  /* 减少动态：系统设置尊重 */
   @media (prefers-reduced-motion: reduce){
     .breathing{ animation:none !important; }
     .track{ transition:none !important; }
@@ -205,22 +193,20 @@
     </div>
   </div>
 
-  <div class="badge">v=2026-03-04e</div>
+  <div class="badge">v=2026-03-04f</div>
   <div id="hint" class="hint"></div>
 
 <script>
 (() => {
-  // ====== 终局参数（锁死） ======
   const MIN_UPDATE_INTERVAL_MS = 1000;
   const CACHE_KEY = "last_price_str";
   const TS_KEY = "last_price_ts";
   const STALE_MS = 10 * 60 * 1000;
 
-  // GitHub Pages：直连 Binance（国内被墙就只能代理/机场）
   const PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
 
   const root = document.documentElement;
-  const DUR = (getComputedStyle(root).getPropertyValue("--dur").trim() || "520ms");
+  const DUR  = (getComputedStyle(root).getPropertyValue("--dur").trim()  || "520ms");
   const EASE = (getComputedStyle(root).getPropertyValue("--ease").trim() || "cubic-bezier(0.08,0.92,0.18,1)");
   const TRANSITION = `transform ${DUR} ${EASE}`;
 
@@ -229,11 +215,10 @@
   const elHint = document.getElementById("hint");
 
   let lastFetchAt = 0;
-  let lastShown = null;        // "68338"
-  let currentDigits = [];      // [{track}]
-  let currentTemplate = "";    // "68,338"
+  let lastShown = null;
+  let currentDigits = [];
+  let currentTemplate = "";
 
-  // 呼吸开关
   const breathOn = (Number(getComputedStyle(root).getPropertyValue("--breath").trim() || "1") === 1);
   if (breathOn) priceBox.classList.add("breathing");
 
@@ -253,16 +238,15 @@
   }
 
   function fitToScreen(template){
-    // 真实测量：让数字尽可能铺满，但永不出边
     const targetW = Math.floor(window.innerWidth  * 0.993);
     const targetH = Math.floor(window.innerHeight * 0.82);
 
-    // 用纯文本测量（不建DOM轨道，快且稳定）
     elPrice.style.fontSize = "10px";
     elPrice.textContent = template;
-    const measure = () => elPrice.getBoundingClientRect();
 
+    const measure = () => elPrice.getBoundingClientRect();
     let lo = 10, hi = 8000, best = 10;
+
     for (let i=0;i<18;i++){
       const mid = (lo + hi) >> 1;
       elPrice.style.fontSize = mid + "px";
@@ -333,14 +317,12 @@
     const templ = formatIntString(intStr);
     const prevTempl = currentTemplate;
 
-    // 位数/逗号结构变化：rebuild + fit
     if (templ.length !== prevTempl.length){
       build(templ);
       setAllInstant(intStr);
       return;
     }
 
-    // 只动变化位 + 两帧提交（防起步咯噔）
     const prevDigits = (prevTempl.match(/\d/g) || []);
     let idx = 0;
     let changed = false;
@@ -355,7 +337,6 @@
 
       if (prevDigit !== nextDigit){
         changed = true;
-
         const oldY = offsetForDigit(prevDigit);
         const newY = offsetForDigit(nextDigit);
 
@@ -388,8 +369,7 @@
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     const p = String(j.price || "").trim();
-    // 去小数点：只取整数部分
-    const intPart = p.split(".")[0].replace(/[^\d]/g,"");
+    const intPart = p.split(".")[0].replace(/[^\d]/g,""); // 去小数
     if (!intPart) throw new Error("bad price");
     return intPart;
   }
@@ -401,17 +381,11 @@
 
     try{
       const nextInt = await fetchPrice();
-
       localStorage.setItem(CACHE_KEY, nextInt);
       localStorage.setItem(TS_KEY, String(now()));
 
-      if (lastShown === null){
-        setAllInstant(nextInt);
-        return;
-      }
-      if (nextInt !== lastShown){
-        animateTo(nextInt);
-      }
+      if (lastShown === null){ setAllInstant(nextInt); return; }
+      if (nextInt !== lastShown) animateTo(nextInt);
     }catch(e){
       if (lastShown === null) renderPlaceholder();
       elHint.textContent = "offline";
@@ -430,7 +404,6 @@
     setInterval(tick, MIN_UPDATE_INTERVAL_MS);
   }
 
-  // 尺寸变化：只重算字号+重建当前结构（无动画）
   window.addEventListener("resize", () => {
     if (lastShown) setAllInstant(lastShown);
     else renderPlaceholder();
