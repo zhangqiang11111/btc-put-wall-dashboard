@@ -58,7 +58,7 @@
     overflow:visible;
 
     font-weight:600;
-    letter-spacing:-0.02em;
+    letter-spacing:-0.03em;
 
     font-variant-numeric: tabular-nums;
     font-feature-settings:"tnum" 1, "lnum" 1;
@@ -72,7 +72,7 @@
     position:absolute;
     inset:-18%;
     pointer-events:none;
-    opacity:.55;
+    opacity:.45;
     filter: blur(26px);
     background:
       radial-gradient(closest-side at 42% 45%, rgba(255,255,255,.18), transparent 55%),
@@ -240,7 +240,7 @@ function fitToScreen(template){
   const wrap = document.querySelector(".wrap");
   const rect = wrap.getBoundingClientRect();
 
-  const targetW = Math.floor(rect.width * 0.995);
+  const targetW = Math.floor(rect.width * 0.97);
   const targetH = Math.floor(rect.height * 0.86);
 
   elPrice.style.fontSize = "10px";
