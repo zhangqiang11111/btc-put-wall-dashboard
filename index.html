@@ -58,7 +58,10 @@
     font-feature-settings:"tnum" 1, "lnum" 1;
     letter-spacing:-0.02em;
     line-height:1;
-    padding:0 0.06em; /* 护城河：防 iOS/Chrome 轻微裁切 */
+
+    /* 关键：整体缩放自适应（替代二分字号） */
+    transform-origin: 50% 50%;
+    will-change: transform;
   }
 
   /* 每一位：窗口裁切（关键：不漏光） */
@@ -69,6 +72,7 @@
     line-height:1em;
     overflow:hidden;
     vertical-align:baseline;
+
     width:0.72em;
     padding:0 0.06em;
     box-sizing:content-box;
@@ -127,8 +131,7 @@
     <div id="price" class="price" aria-label="BTC Price"></div>
   </div>
 
-  <!-- 版本号：用它判断是否命中新包 -->
-  <div class="badge">v=2026-03-04b</div>
+  <div class="badge">v=2026-03-04c</div>
   <div id="hint" class="hint"></div>
 
 <script>
@@ -155,9 +158,8 @@
   let lastShown = null;       // "68338"
   let currentDigits = [];     // [{digit, track}]
   let currentTemplate = "";   // "68,338"
-  let digitsOnlyPrev = "";    // 上一次 template 的纯数字序列（用于比较每一位）
+  let digitsOnlyPrev = "";    // 纯数字序列
 
-  // ====== 工具 ======
   const now = () => Date.now();
 
   function isStale(ts){
@@ -178,40 +180,36 @@
     return (-n) + "em";
   }
 
-  function fitToScreen(template){
-    // 关键修复：用 wrap 的可用空间，不用 window.innerWidth（否则会无视 padding/safe-area，导致出屏）
-    const availW = Math.max(10, Math.floor(elWrap.clientWidth  * 0.995));
-    const availH = Math.max(10, Math.floor(elWrap.clientHeight * 0.80));
+  function applyScaleFit(){
+    // 用 wrap 的真实可用区域（已扣 padding/safe-area）
+    const availW = Math.max(10, elWrap.clientWidth);
+    const availH = Math.max(10, elWrap.clientHeight);
 
-    // 用纯文本测量（不会触发数字滚动，也不会“整行闪”）
-    elPrice.style.fontSize = "10px";
-    elPrice.textContent = template;
+    // 目标利用率（你要的“铺满但不出边”）
+    const targetW = availW * 0.995;
+    const targetH = availH * 0.80;
 
-    let lo = 10, hi = 4000, best = 10;
-    for (let i=0;i<18;i++){
-      const mid = (lo + hi) >> 1;
-      elPrice.style.fontSize = mid + "px";
-      const r = elPrice.getBoundingClientRect();
-      const ok = (r.width <= availW) && (r.height <= availH);
-      if (ok){ best = mid; lo = mid + 1; }
-      else { hi = mid - 1; }
-    }
+    // 先清 scale 取真实尺寸
+    elPrice.style.transform = "scale(1)";
+    const r = elPrice.getBoundingClientRect();
 
-    elPrice.style.fontSize = best + "px";
-    elPrice.textContent = ""; // 还原给 build 用
+    if (!r.width || !r.height) return;
+
+    const s = Math.min(targetW / r.width, targetH / r.height);
+    // 防止极端值
+    const safe = Math.max(0.01, Math.min(10, s));
+
+    elPrice.style.transform = `scale(${safe})`;
   }
 
   function build(template){
-    // template includes commas
+    // 固定一个“超大字号”，再靠 scaleFit 适配（不再二分字号）
+    elPrice.style.fontSize = "1000px";
     elPrice.innerHTML = "";
     currentDigits = [];
     currentTemplate = template;
     digitsOnlyPrev = (template.match(/\d/g) || []).join("");
 
-    // 先 fit（用纯文本测）
-    fitToScreen(template);
-
-    // 再生成 DOM
     for (const ch of template){
       if (ch === ","){
         const sep = document.createElement("span");
@@ -240,12 +238,17 @@
         elPrice.appendChild(t);
       }
     }
+
+    // DOM 已生成，再 fit（测量对象=最终DOM，永远不会飘）
+    applyScaleFit();
   }
 
   function setAllInstant(intStr){
     const templ = formatIntString(intStr);
     if (templ !== currentTemplate){
       build(templ);
+    } else {
+      applyScaleFit();
     }
 
     let idx = 0;
@@ -288,7 +291,7 @@
       // Two-Frame Commit：专治起步“咯噔”
       track.style.transition = "none";
       track.style.setProperty("--y", oldY);
-      track.getBoundingClientRect(); // force reflow
+      track.getBoundingClientRect();
 
       requestAnimationFrame(() => {
         track.style.transition = TRANSITION;
@@ -297,19 +300,22 @@
     }
 
     if (!changed) return;
+
     currentTemplate = templ;
     digitsOnlyPrev = digitsOnlyNext;
     lastShown = intStr;
+
+    // 字体没变但窗口可能变（比如缩放/全屏），顺手确保 fit 正确
+    applyScaleFit();
   }
 
   function renderPlaceholder(){
-    // 首屏永不 0：只 --（并且也铺满）
+    elPrice.style.fontSize = "1000px";
     elPrice.innerHTML = "";
-    fitToScreen("--");
     elPrice.textContent = "--";
+    applyScaleFit();
   }
 
-  // ====== 数据层 ======
   async function fetchPrice(){
     const r = await fetch(PRICE_API, { cache:"no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -328,22 +334,18 @@
     try{
       const nextInt = await fetchPrice();
 
-      // 成功：写缓存
       localStorage.setItem(CACHE_KEY, nextInt);
       localStorage.setItem(TS_KEY, String(now()));
 
-      // 首次真实价：直接落位（无动画）
       if (lastShown === null){
         setAllInstant(nextInt);
         return;
       }
 
-      // 普通更新：只滚变化位
       if (nextInt !== lastShown){
         animateTo(nextInt);
       }
     }catch(e){
-      // 失败：保持当前显示（不闪、不归零）
       if (lastShown === null){
         renderPlaceholder();
       }
@@ -353,7 +355,6 @@
   }
 
   function boot(){
-    // warm start：缓存价（未过期）→ 立即渲染（无动画）；否则 --
     const cached = localStorage.getItem(CACHE_KEY);
     const ts = localStorage.getItem(TS_KEY);
 
@@ -363,18 +364,12 @@
       renderPlaceholder();
     }
 
-    // 立刻拉取 + 固定 1000ms
     tick();
     setInterval(tick, MIN_UPDATE_INTERVAL_MS);
   }
 
-  // 旋转/尺寸变化：重算字号并无动画落位（不乱抖）
   window.addEventListener("resize", () => {
-    if (lastShown){
-      setAllInstant(lastShown);
-    } else {
-      renderPlaceholder();
-    }
+    applyScaleFit();
   }, { passive:true });
 
   if (document.readyState === "loading"){
