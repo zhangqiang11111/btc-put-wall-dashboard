@@ -1,1 +1,401 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>BTC</title><style>:root{--bg:#000;--ink:rgba(255,255,255,0.92)}body,html{height:100%;margin:0;background:var(--bg);overflow:hidden;overscroll-behavior:none;touch-action:none}body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Arial;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;box-sizing:border-box;user-select:none;padding-left:calc(env(safe-area-inset-left) + 6vw);padding-right:calc(env(safe-area-inset-right) + 6vw);padding-top:calc(env(safe-area-inset-top) + 5vh);padding-bottom:calc(env(safe-area-inset-bottom)+ 5vh)}.price{color:var(--ink);font-weight:700;line-height:.88;letter-spacing:-.045em;font-variant-numeric:tabular-nums;font-feature-settings:"tnum","lnum";white-space:nowrap;will-change:font-size}.odometer{display:inline-flex;align-items:baseline;justify-content:center;gap:0;white-space:nowrap}.digit{position:relative;width:.7em;height:1em;overflow:hidden;display:inline-block;padding:0 .02em;box-sizing:content-box}.sep{width:.22em;display:inline-block;text-align:center;margin:0 -.04em;opacity:.86}.stack{position:absolute;left:0;top:0;will-change:transform;transition-property:transform;transition-duration:260ms;transition-timing-function:cubic-bezier(0.16,1,0.3,1)}.stack span{display:block;height:1em;line-height:1em;text-align:center;padding-right:.03em;box-sizing:border-box}@media (max-width:430px){.stage{padding-left:calc(env(safe-area-inset-left) + 9vw);padding-right:calc(env(safe-area-inset-right) + 11vw)}.price{letter-spacing:-.040em}}</style><script defer="defer" src="/btc-put-wall-dashboard/static/js/main.fbea7606.js"></script><link href="/btc-put-wall-dashboard/static/css/main.19dd2819.css" rel="stylesheet"></head><body><div class="stage"><div id="price" class="price odometer" aria-label="BTC price"></div></div><script>const PRICE_API="https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",priceEl=document.getElementById("price"),fmt=new Intl.NumberFormat("en-US",{maximumFractionDigits:0});let lastLen=null,inited=!1;function freezeOdometer(e,t=!0){e.querySelectorAll(".stack").forEach(e=>{e.style.transitionDuration=t?"0ms":"",e.style.transitionDelay=t?"0ms":""})}function buildOdometer(e,t){e.innerHTML="";for(const n of t)if(n>="0"&&n<="9"){const t=document.createElement("span");t.className="digit",t.dataset.value=n;const i=document.createElement("span");i.className="stack";for(let e=0;e<=9;e++){const t=document.createElement("span");t.textContent=String(e),i.appendChild(t)}t.appendChild(i),e.appendChild(t),i.style.transform=`translateY(${-Number(n)}em)`}else{const t=document.createElement("span");t.className="sep",t.textContent=n,e.appendChild(t)}}function setOdometer(e,t){const n=Array.from(e.children),i=n.filter(e=>e.classList&&e.classList.contains("digit")).length;if(n.map(e=>e.classList?.contains("digit")?e.dataset.value:e.textContent).join("").length!==t.length)return void rebuildAndFit(t);let o=0,r=0;for(const e of t){const t=n[r++];if(!t)break;if(t.classList.contains("digit")){const n=t.querySelector(".stack"),r=i-1-o,s=Math.min(120,18*r);n.style.transitionDelay=`${s}ms`,t.dataset.value!==e&&(t.dataset.value=e,n.style.transform=`translateY(${-Number(e)}em)`),o++}else t.textContent=e}}function fitPrice(){const e=document.querySelector(".stage").getBoundingClientRect(),t=e.width,n=e.height;let i=10,o=700;for(;o-i>.5;){const e=(i+o)/2;priceEl.style.fontSize=e+"px";const r=priceEl.getBoundingClientRect();r.width<=.995*t&&r.height<=.8*n?i=e:o=e}priceEl.style.fontSize=i+"px"}function rebuildAndFit(e){freezeOdometer(priceEl,!0),buildOdometer(priceEl,e),fitPrice(),requestAnimationFrame(()=>freezeOdometer(priceEl,!1))}function onNewPriceText(e){return e=String(e).replace(/,\s+/g,","),inited?e.length!==lastLen?(rebuildAndFit(e),void(lastLen=e.length)):void setOdometer(priceEl,e):(rebuildAndFit(e),lastLen=e.length,void(inited=!0))}async function fetchPrice(){const e=await fetch(PRICE_API,{cache:"no-store"});if(!e.ok)throw new Error("price http "+e.status);const t=await e.json(),n=Number(t.price);if(!Number.isFinite(n))throw new Error("bad price");return n}async function loop(){try{const e=await fetchPrice();onNewPriceText(fmt.format(Math.round(e)))}catch(e){}finally{setTimeout(loop,1e3)}}onNewPriceText("0"),loop(),window.addEventListener("orientationchange",()=>{setTimeout(fitPrice,80)}),window.addEventListener("pageshow",()=>{setTimeout(fitPrice,80)})</script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>BTC</title>
+<style>
+  :root{
+    --bg-start:#141c2e;
+    --bg-mid:#0f1625;
+    --bg-end:#0a0e1a;
+    --ink:#f1f5f9;
+    --muted:rgba(255,255,255,.55);
+
+    --dur:520ms;
+    --ease:cubic-bezier(0.08,0.92,0.18,1);
+
+    --pad:clamp(16px, 3.5vw, 42px);
+  }
+
+  html,body{
+    height:100%;
+    margin:0;
+    background: radial-gradient(1200px 800px at 50% 20%, var(--bg-start), var(--bg-mid) 45%, var(--bg-end));
+    color:var(--ink);
+    overflow:hidden;
+    touch-action:none;
+    -webkit-tap-highlight-color: transparent;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",system-ui,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+  }
+
+  .wrap{
+    height:100%;
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: calc(var(--pad) + env(safe-area-inset-top)) calc(var(--pad) + env(safe-area-inset-right))
+             calc(var(--pad) + env(safe-area-inset-bottom)) calc(var(--pad) + env(safe-area-inset-left));
+    box-sizing:border-box;
+  }
+
+  .price{
+    display:inline-flex;
+    align-items:baseline;
+    justify-content:center;
+    gap:0;
+    user-select:none;
+    -webkit-user-select:none;
+    overflow:visible; /* 防刀切 */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:"tnum" 1, "lnum" 1;
+    letter-spacing:-0.02em;
+    line-height:1;
+  }
+
+  /* 每一位：窗口裁切 */
+  .digit{
+    position:relative;
+    display:inline-block;
+    height:1em;
+    line-height:1em;
+    overflow:hidden;         /* 关键：窗口不漏光 */
+    vertical-align:baseline;
+    width:0.72em;            /* 列宽护城河 */
+    padding:0 0.06em;        /* 右侧缓冲防“刀切感” */
+    box-sizing:content-box;
+  }
+
+  /* 轨道：只动 transform */
+  .track{
+    position:absolute;
+    left:0;
+    top:0;
+    will-change:transform;
+    transform: translate3d(0, var(--y, 0), 0);
+  }
+
+  .cell{
+    height:1em;
+    line-height:1em;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .sep{
+    display:inline-block;
+    width:0.35em;
+    text-align:center;
+    opacity:.95;
+    margin-left:-0.02em; /* 逗号紧贴一点点 */
+    margin-right:-0.02em;
+  }
+
+  .badge{
+    position:fixed;
+    right:10px;
+    bottom:10px;
+    opacity:.18;
+    font:12px -apple-system,BlinkMacSystemFont,system-ui;
+    z-index:9999;
+    pointer-events:none;
+  }
+
+  .hint{
+    position:fixed;
+    left:10px;
+    bottom:10px;
+    opacity:.18;
+    font:12px -apple-system,BlinkMacSystemFont,system-ui;
+    z-index:9999;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="price" class="price" aria-label="BTC Price"></div>
+  </div>
+
+  <div class="badge">v=2026-03-04a</div>
+  <div id="hint" class="hint"></div>
+
+<script>
+(() => {
+  // ====== 终局参数（定死） ======
+  const MIN_UPDATE_INTERVAL_MS = 1000;
+  const CACHE_KEY = "last_price_str";
+  const TS_KEY = "last_price_ts";
+  const STALE_MS = 10 * 60 * 1000;
+
+  // GitHub Pages 不能同源代理，只能直连（被墙则需要代理）
+  // 你以后若有 Worker/VPS 代理，把这里换成你自己的 https://.../api/price
+  const PRICE_API = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
+
+  const DUR = getComputedStyle(document.documentElement).getPropertyValue("--dur").trim() || "520ms";
+  const EASE = getComputedStyle(document.documentElement).getPropertyValue("--ease").trim() || "cubic-bezier(0.08,0.92,0.18,1)";
+  const TRANSITION = `transform ${DUR} ${EASE}`;
+
+  const elPrice = document.getElementById("price");
+  const elHint = document.getElementById("hint");
+
+  let lastFetchAt = 0;
+  let lastShown = null;  // string like "68338"
+  let currentDigits = []; // DOM refs for digits
+  let currentTemplate = ""; // template string with commas (e.g. "68,338")
+
+  // ====== 工具 ======
+  const now = () => Date.now();
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function formatIntString(nStr){
+    // nStr: "68338" -> "68,338"
+    const s = String(nStr).replace(/[^\d]/g, "");
+    if (!s) return "--";
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function isStale(ts){
+    if (!ts) return true;
+    const t = Number(ts);
+    if (!Number.isFinite(t)) return true;
+    return (now() - t) > STALE_MS;
+  }
+
+  function fitToScreen(template){
+    // 动态字号：用二分搜索测量宽度，让它铺满但不出边
+    const targetW = Math.floor(window.innerWidth * 0.995);
+    const targetH = Math.floor(window.innerHeight * 0.80);
+
+    // 临时测量容器
+    elPrice.style.fontSize = "10px";
+    elPrice.textContent = template;
+    const meas = () => elPrice.getBoundingClientRect();
+
+    let lo = 10, hi = 4000, best = 10;
+    for (let i=0;i<16;i++){
+      const mid = Math.floor((lo+hi)/2);
+      elPrice.style.fontSize = mid + "px";
+      const r = meas();
+      const ok = (r.width <= targetW) && (r.height <= targetH);
+      if (ok){ best = mid; lo = mid + 1; }
+      else { hi = mid - 1; }
+    }
+    elPrice.style.fontSize = best + "px";
+    elPrice.textContent = ""; // 还原
+  }
+
+  function build(template){
+    // template includes commas
+    elPrice.innerHTML = "";
+    currentDigits = [];
+    currentTemplate = template;
+
+    // 先 fit（用纯文本测）
+    fitToScreen(template);
+
+    // 再按 template 生成 DOM
+    for (const ch of template){
+      if (ch === ","){
+        const sep = document.createElement("span");
+        sep.className = "sep";
+        sep.textContent = ",";
+        elPrice.appendChild(sep);
+      } else if (/\d/.test(ch)) {
+        const digit = document.createElement("span");
+        digit.className = "digit";
+
+        const track = document.createElement("span");
+        track.className = "track";
+
+        // 0-9 轨道
+        for (let i=0;i<=9;i++){
+          const cell = document.createElement("span");
+          cell.className = "cell";
+          cell.textContent = String(i);
+          track.appendChild(cell);
+        }
+        // 默认 y=0 (显示0)，但我们会立即 set 到真实值
+        digit.appendChild(track);
+        elPrice.appendChild(digit);
+        currentDigits.push({digit, track});
+      } else {
+        // fallback
+        const t = document.createElement("span");
+        t.textContent = ch;
+        elPrice.appendChild(t);
+      }
+    }
+  }
+
+  function offsetForDigit(d){
+    // d is char "0"-"9"
+    const n = Number(d);
+    // y: 0 -> 0em, 1 -> -1em ...
+    return (-n) + "em";
+  }
+
+  function setAllInstant(intStr){
+    // intStr: "68338"
+    const templ = formatIntString(intStr);
+    if (templ !== currentTemplate){
+      build(templ);
+    }
+    // 逐个 digit 设置到对应数（无动画）
+    let idx = 0;
+    for (const ch of templ){
+      if (/\d/.test(ch)){
+        const {track} = currentDigits[idx++];
+        track.style.transition = "none";
+        track.style.setProperty("--y", offsetForDigit(ch));
+      }
+    }
+    lastShown = intStr;
+  }
+
+  function animateTo(intStr){
+    // 只动变化位 + 两帧提交（防起步咯噔）
+    const templ = formatIntString(intStr);
+    const prevTempl = currentTemplate;
+
+    // 位数变化/千分位变化 → rebuild + fit
+    if (templ.length !== prevTempl.length){
+      build(templ);
+      // rebuild 后先瞬间落到 prev 或者当前（用当前更稳）
+      setAllInstant(intStr);
+      return;
+    }
+
+    // template一致，不 rebuild，只对变化位滚动
+    // 注意：templ含逗号，我们按 digit 序列对齐
+    let idx = 0;
+    let changed = false;
+
+    for (let i=0;i<templ.length;i++){
+      const ch = templ[i];
+      if (!/\d/.test(ch)) continue;
+
+      const {track} = currentDigits[idx];
+      const prevDigitChar = (prevTempl.match(/\d/g) || [])[idx] || "0";
+      const nextDigitChar = ch;
+
+      if (prevDigitChar !== nextDigitChar){
+        changed = true;
+
+        const oldY = offsetForDigit(prevDigitChar);
+        const newY = offsetForDigit(nextDigitChar);
+
+        // Two-Frame Commit
+        track.style.transition = "none";
+        track.style.setProperty("--y", oldY);
+        track.getBoundingClientRect(); // force reflow
+
+        requestAnimationFrame(() => {
+          track.style.transition = TRANSITION;
+          track.style.setProperty("--y", newY);
+        });
+      }
+      idx++;
+    }
+
+    if (!changed){
+      // 不变：不做任何DOM写入（铁律）
+      return;
+    }
+
+    currentTemplate = templ;
+    lastShown = intStr;
+  }
+
+  function renderPlaceholder(){
+    elPrice.innerHTML = "";
+    fitToScreen("--");
+    elPrice.textContent = "--";
+  }
+
+  // ====== 数据层 ======
+  async function fetchPrice(){
+    const r = await fetch(PRICE_API, { cache:"no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    const p = String(j.price || "").trim();
+    // 取整数部分
+    const intPart = p.split(".")[0].replace(/[^\d]/g,"");
+    if (!intPart) throw new Error("bad price");
+    return intPart;
+  }
+
+  async function tick(){
+    const t = now();
+    if (t - lastFetchAt < MIN_UPDATE_INTERVAL_MS) return;
+    lastFetchAt = t;
+
+    try{
+      const nextInt = await fetchPrice();
+      // 成功：写缓存
+      localStorage.setItem(CACHE_KEY, nextInt);
+      localStorage.setItem(TS_KEY, String(now()));
+
+      // 首次真实价：与当前一致不动画
+      if (lastShown === null){
+        setAllInstant(nextInt);
+        return;
+      }
+
+      // 普通更新：只滚变化位
+      if (nextInt !== lastShown){
+        animateTo(nextInt);
+      }
+    }catch(e){
+      // 失败：保持当前显示（铁律）
+      // 首屏且无缓存：显示 --
+      if (lastShown === null){
+        renderPlaceholder();
+      }
+      // 轻提示（不影响主视觉）
+      elHint.textContent = "offline";
+      setTimeout(()=>{ elHint.textContent=""; }, 1200);
+    }
+  }
+
+  function boot(){
+    // 启动：warm start（缓存价 -> --），并立即请求
+    const cached = localStorage.getItem(CACHE_KEY);
+    const ts = localStorage.getItem(TS_KEY);
+
+    if (cached && !isStale(ts)){
+      setAllInstant(cached);
+    } else {
+      renderPlaceholder();
+    }
+
+    // DOMContentLoaded 立即拉取（你要的速度）
+    tick();
+    setInterval(tick, MIN_UPDATE_INTERVAL_MS);
+  }
+
+  // 横竖屏/尺寸变化：只 fit，不 rebuild（除非位数变化触发 rebuild）
+  window.addEventListener("resize", () => {
+    if (lastShown){
+      // 重新 fit 并 rebuild 当前模板（因为字号需要重新测量）
+      // 但不改变位数结构，不触发滚动动画
+      setAllInstant(lastShown);
+    } else {
+      renderPlaceholder();
+    }
+  }, { passive:true });
+
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot, { once:true });
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
