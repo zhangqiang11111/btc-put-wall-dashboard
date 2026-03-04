@@ -92,18 +92,18 @@
   }
 
   /* 每一位：窗口裁切 */
-  .digit{
-    position:relative;
-    display:inline-block;
-    height:1em;
-    line-height:1em;
-    overflow:hidden;
-    vertical-align:baseline;
+ .digit{
+  position:relative;
+  display:inline-block;
+  height:1em;
+  line-height:1em;
+  overflow:hidden;
+  vertical-align:baseline;
 
-    width:0.72em;
-    padding:0 0.06em;
-    box-sizing:content-box;
-  }
+  width:1ch;        /* ✅关键：和测量模型对齐 */
+  padding:0;        /* ✅别加内边距，不然又会比测量宽 */
+  box-sizing:content-box;
+}
 
   /* 轨道：纯 transform，GPU */
   .track{
@@ -236,30 +236,31 @@
     if (!Number.isFinite(t)) return true;
     return (now() - t) > STALE_MS;
   }
+function fitToScreen(template){
+  const wrap = document.querySelector(".wrap");
+  const rect = wrap.getBoundingClientRect();
 
-  function fitToScreen(template){
-    const targetW = Math.floor(window.innerWidth  * 0.993);
-    const targetH = Math.floor(window.innerHeight * 0.82);
+  const targetW = Math.floor(rect.width * 0.995);
+  const targetH = Math.floor(rect.height * 0.86);
 
-    elPrice.style.fontSize = "10px";
-    elPrice.textContent = template;
+  elPrice.style.fontSize = "10px";
+  elPrice.textContent = template;
 
-    const measure = () => elPrice.getBoundingClientRect();
-    let lo = 10, hi = 8000, best = 10;
+  const measure = () => elPrice.getBoundingClientRect();
+  let lo = 10, hi = 8000, best = 10;
 
-    for (let i=0;i<18;i++){
-      const mid = (lo + hi) >> 1;
-      elPrice.style.fontSize = mid + "px";
-      const r = measure();
-      const ok = (r.width <= targetW) && (r.height <= targetH);
-      if (ok){ best = mid; lo = mid + 1; }
-      else { hi = mid - 1; }
-    }
-
-    elPrice.style.fontSize = best + "px";
-    elPrice.textContent = "";
+  for (let i=0;i<18;i++){
+    const mid = (lo + hi) >> 1;
+    elPrice.style.fontSize = mid + "px";
+    const r = measure();
+    const ok = (r.width <= targetW) && (r.height <= targetH);
+    if (ok){ best = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
   }
 
+  elPrice.style.fontSize = best + "px";
+  elPrice.textContent = "";
+}
   function build(template){
     elPrice.innerHTML = "";
     currentDigits = [];
